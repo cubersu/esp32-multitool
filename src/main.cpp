@@ -3,6 +3,7 @@
 #include "ble_manager.h"
 #include "command_protocol.h"
 #include "feature_flags.h"
+#include "subghz_manager.h"
 
 #if ENABLE_LOCAL_CONTROLS
 #include "button_input.h"
@@ -13,6 +14,12 @@
 // BLE yöneticisi, servis/karakteristik kurulumunu ve callback'leri
 // kendi içinde yönetir. OLED/buton donanımından bağımsız, her zaman aktif.
 BleManager bleManager;
+
+// CC1101 Sub-GHz modülü (Faz 4). command_protocol.h bu global'e "extern"
+// ile erişir. Donanım henüz bağlı değil; SPI hattında karşılık veren bir
+// çip yokken begin()'in/komutların davranışı doğrulanmadı, modül takılıp
+// ilk test edildiğinde kontrol edilmeli.
+SubGhzManager subGhzManager;
 
 #if ENABLE_LOCAL_CONTROLS
 // OLED + 5 butonla telefon olmadan yerel kontrol (Faz 1). Şu an
@@ -30,6 +37,9 @@ void setup() {
   // BLE'yi başlat ve gelen komutları command_protocol'daki
   // processCommand fonksiyonuna yönlendir.
   bleManager.begin(processCommand);
+
+  // CC1101'i 433.92MHz + ASK/OOK moduna ayarla (Faz 4).
+  subGhzManager.begin();
 
 #if ENABLE_LOCAL_CONTROLS
   // Yerel OLED + buton menüsünü başlat. deviceMenu, ping/wifi_scan/

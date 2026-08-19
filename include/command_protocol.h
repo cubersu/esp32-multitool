@@ -4,11 +4,28 @@
 #include <ArduinoJson.h>
 
 #include "ble_scanner.h"
+#include "subghz_manager.h"
 #include "wifi_scanner.h"
+
+// SubGhzManager, setup() içinde bir kez begin() çağrılan durumlu
+// (stateful) bir modül olduğu için main.cpp'de tanımlanır; burada yalnızca
+// referans ediliyor.
+extern SubGhzManager subGhzManager;
+
+// Verilen mesajla genel bir hata yanıtı üretir.
+inline String buildErrorResponse(const char *message) {
+  JsonDocument responseDoc;
+  responseDoc["status"] = "error";
+  responseDoc["msg"] = message;
+
+  String response;
+  serializeJson(responseDoc, response);
+  return response;
+}
 
 // Bilinmeyen/geçersiz komutlar için ortak hata yanıtı.
 inline String buildUnknownCommandResponse() {
-  return "{\"status\":\"error\",\"msg\":\"unknown command\"}";
+  return buildErrorResponse("unknown command");
 }
 
 // dataJson, zaten tam bir JSON değeri (nesne ya da dizi) olan bir string'i
@@ -51,6 +68,39 @@ inline String processCommand(const String &input) {
 
   if (strcmp(cmd, "ble_scan") == 0) {
     return buildDataResponse(scanBleDevices());
+  }
+
+  if (strcmp(cmd, "subghz_capture") == 0) {
+    // İsteğe bağlı "timeout_ms" alanı; verilmezse 15sn, güvenlik için en
+    // fazla 60sn.
+    uint32_t timeoutMs = requestDoc["timeout_ms"] | 15000;
+    if (timeoutMs > 60000) {
+      timeoutMs = 60000;
+    }
+
+    String pulsesBase64 = subGhzManager.captureSignal(timeoutMs);
+    if (pulsesBase64.length() == 0) {
+      return buildErrorResponse("no signal captured");
+    }
+
+    JsonDocument dataDoc;
+    dataDoc["type"] = "subghz_capture";
+    dataDoc["frequency_hz"] = 433920000;
+    dataDoc["pulses_b64"] = pulsesBase64;
+
+    String dataJson;
+    serializeJson(dataDoc, dataJson);
+    return buildDataResponse(dataJson);
+  }
+
+  if (strcmp(cmd, "subghz_replay") == 0) {
+    const char *pulsesBase64 = requestDoc["pulses_b64"];
+    if (pulsesBase64 == nullptr) {
+      return buildErrorResponse("missing pulses_b64");
+    }
+
+    subGhzManager.replaySignal(String(pulsesBase64));
+    return "{\"status\":\"ok\",\"data\":\"replayed\"}";
   }
 
   return buildUnknownCommandResponse();

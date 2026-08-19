@@ -8,6 +8,11 @@ void BleManager::begin(CommandHandler handler) {
   commandHandler = handler;
 
   BLEDevice::init(BLE_DEVICE_NAME);
+  // Varsayılan BLE paket boyutu (23 byte) büyük yanıtlar (örn. Sub-GHz ham
+  // sinyal verisi) için yetersiz; daha büyük bir MTU talep ediyoruz.
+  // Telefon bunu kabul etmeyebilir, o zaman GATT varsayılana düşer —
+  // AndroidBleManager tarafında da eşleşen bir requestMtu() çağrısı var.
+  BLEDevice::setMTU(517);
 
   server = BLEDevice::createServer();
   serverCallbacks = new ServerCallbacks();
