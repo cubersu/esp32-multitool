@@ -24,7 +24,13 @@ class BleManager {
   // notify gönderir.
   void notifyResponse(const String &payload);
 
+  // Şu an bir telefonun bağlı olup olmadığını döner. BLE komut işleme bu
+  // değere bağımlı değildir; yerel OLED durum ekranı gibi tüketiciler için
+  // eklendi (bkz. main.cpp / feature_flags.h ENABLE_OLED_STATUS).
+  bool isConnected() const { return connected; }
+
  private:
+  bool connected = false;
   BLEServer *server = nullptr;
   BLECharacteristic *commandCharacteristic = nullptr;
   BLECharacteristic *responseCharacteristic = nullptr;
@@ -40,12 +46,16 @@ class BleManager {
     BleManager *owner;
   };
 
-  // Bağlantı koptuğunda advertising'i yeniden başlatmak için kullanılan
-  // callback sınıfı (aksi halde cihaz tekrar keşfedilebilir olmuyor).
+  // Bağlantı koptuğunda advertising'i yeniden başlatmak, bağlıyken de
+  // owner->connected'ı güncel tutmak için kullanılan callback sınıfı.
   class ServerCallbacks : public BLEServerCallbacks {
    public:
+    explicit ServerCallbacks(BleManager *owner) : owner(owner) {}
     void onConnect(BLEServer *server) override;
     void onDisconnect(BLEServer *server) override;
+
+   private:
+    BleManager *owner;
   };
 
   CommandCharCallbacks *commandCallbacks = nullptr;

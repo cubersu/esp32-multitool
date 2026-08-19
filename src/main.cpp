@@ -9,6 +9,8 @@
 #include "button_input.h"
 #include "device_menu.h"
 #include "oled_display.h"
+#elif ENABLE_OLED_STATUS
+#include "oled_display.h"
 #endif
 
 // BLE yöneticisi, servis/karakteristik kurulumunu ve callback'leri
@@ -28,6 +30,10 @@ SubGhzManager subGhzManager;
 OledDisplay oledDisplay;
 ButtonInput buttonInput;
 DeviceMenu deviceMenu;
+#elif ENABLE_OLED_STATUS
+// Butonlar henüz yok; OLED yalnızca BLE bağlantı durumunu gösteren statik
+// bir ekran olarak kullanılıyor (gezinilebilir menü yok).
+OledDisplay oledDisplay;
 #endif
 
 void setup() {
@@ -48,6 +54,9 @@ void setup() {
   oledDisplay.begin();
   deviceMenu.begin(&oledDisplay);
   buttonInput.begin([](ButtonId button) { deviceMenu.onButton(button); });
+#elif ENABLE_OLED_STATUS
+  oledDisplay.begin();
+  oledDisplay.showText("ESP32-MultiTool", "Baglanti bekleniyor...");
 #endif
 }
 
@@ -59,5 +68,22 @@ void loop() {
   // çizimi kesme bağlamında güvenli olmadığı için buraya ertelenir) —
   // bu, BLE komutlarını beklemek için "polling" yapmakla karıştırılmamalı.
   buttonInput.poll();
+#elif ENABLE_OLED_STATUS
+  // Buton olmadığı için tetiklenecek bir kesme yok; bağlantı durumu
+  // değiştiğinde ekranı güncellemek için ~500ms'de bir hafif bir kontrol
+  // yapıyoruz. Bu, BLE komutlarını beklemek için "polling" yapmakla
+  // karıştırılmamalı — yalnızca ekranı tazelemek için, BLE komut işleme
+  // hâlâ tamamen callback tabanlı.
+  static bool lastConnected = false;
+  static uint32_t lastCheckMs = 0;
+  uint32_t now = millis();
+  if (now - lastCheckMs >= 500) {
+    lastCheckMs = now;
+    bool connected = bleManager.isConnected();
+    if (connected != lastConnected) {
+      lastConnected = connected;
+      oledDisplay.showText("ESP32-MultiTool", connected ? "Bagli" : "Baglanti bekleniyor...");
+    }
+  }
 #endif
 }

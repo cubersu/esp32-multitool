@@ -15,7 +15,7 @@ void BleManager::begin(CommandHandler handler) {
   BLEDevice::setMTU(517);
 
   server = BLEDevice::createServer();
-  serverCallbacks = new ServerCallbacks();
+  serverCallbacks = new ServerCallbacks(this);
   server->setCallbacks(serverCallbacks);
 
   BLEService *service = server->createService(BLE_SERVICE_UUID);
@@ -62,11 +62,11 @@ void BleManager::CommandCharCallbacks::onWrite(
 }
 
 void BleManager::ServerCallbacks::onConnect(BLEServer *server) {
-  // Şu an için ek bir işlem gerekmiyor, ileride bağlantı durumu takibi
-  // eklenebilir.
+  owner->connected = true;
 }
 
 void BleManager::ServerCallbacks::onDisconnect(BLEServer *server) {
+  owner->connected = false;
   // Bağlantı koptuğunda advertising durur; yeniden keşfedilebilir olmak
   // için advertising'i tekrar başlatıyoruz.
   BLEDevice::startAdvertising();
