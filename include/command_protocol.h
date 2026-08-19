@@ -4,13 +4,15 @@
 #include <ArduinoJson.h>
 
 #include "ble_scanner.h"
+#include "buzzer.h"
 #include "subghz_manager.h"
 #include "wifi_scanner.h"
 
-// SubGhzManager, setup() içinde bir kez begin() çağrılan durumlu
-// (stateful) bir modül olduğu için main.cpp'de tanımlanır; burada yalnızca
-// referans ediliyor.
+// SubGhzManager ve Buzzer, setup() içinde bir kez begin() çağrılan durumlu
+// (stateful) modüller oldukları için main.cpp'de tanımlanır; burada
+// yalnızca referans ediliyor.
 extern SubGhzManager subGhzManager;
+extern Buzzer buzzer;
 
 // Verilen mesajla genel bir hata yanıtı üretir.
 inline String buildErrorResponse(const char *message) {
@@ -59,6 +61,7 @@ inline String processCommand(const String &input) {
   }
 
   if (strcmp(cmd, "ping") == 0) {
+    buzzer.beep();
     return "{\"status\":\"ok\",\"data\":\"pong\"}";
   }
 
