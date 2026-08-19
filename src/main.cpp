@@ -41,6 +41,21 @@ DeviceMenu deviceMenu;
 OledDisplay oledDisplay;
 #endif
 
+// command_protocol.h, "oled_text" komutunu işlerken bu fonksiyonu çağırır.
+// OledDisplay bayrağa göre var olabildiği/olmayabildiği için (bkz. yukarısı)
+// command_protocol.h'ın doğrudan "oledDisplay" global'ine erişmesi yerine bu
+// tek noktadan geçen sarmalayıcı kullanılıyor; böylece hangi mod aktifse
+// (ya da hiçbiri değilse) davranış burada tek yerde yönetiliyor.
+void showPhoneMessage(const String &text) {
+#if ENABLE_LOCAL_CONTROLS
+  // Tam menü modunda OLED'i DeviceMenu yönetiyor; telefon mesajını
+  // menünün üzerine yazmak kafa karıştırıcı olur, bu yüzden bu modda
+  // "oled_text" komutu şimdilik yok sayılıyor.
+#elif ENABLE_OLED_STATUS
+  oledDisplay.showText("Telefondan", text);
+#endif
+}
+
 void setup() {
   // Sadece debug amaçlı; donanım bağlıyken seri monitörden izlenebilir.
   Serial.begin(115200);

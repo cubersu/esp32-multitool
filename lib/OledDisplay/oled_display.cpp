@@ -48,6 +48,53 @@ void OledDisplay::showText(const String &title, const String &body) {
   u8g2.clearBuffer();
   u8g2.drawStr(0, 10, title.c_str());
   u8g2.drawHLine(0, 12, 128);
-  u8g2.drawStr(0, 24, body.c_str());
+
+  // u8g2_font_6x10_tf ~6px/karakter; 128px genişlikte küçük bir kenar
+  // payıyla satır başına ~20 karakter sığar.
+  constexpr int kMaxCharsPerLine = 20;
+  std::vector<String> lines = wrapText(body, kMaxCharsPerLine);
+
+  int y = kFirstRowY;
+  int rowsDrawn = 0;
+  for (const String &line : lines) {
+    if (rowsDrawn >= kVisibleRows) {
+      break;
+    }
+    u8g2.drawStr(0, y, line.c_str());
+    y += kRowHeight;
+    rowsDrawn++;
+  }
+
   u8g2.sendBuffer();
+}
+
+std::vector<String> OledDisplay::wrapText(const String &text, int maxCharsPerLine) {
+  std::vector<String> lines;
+  int start = 0;
+  int length = static_cast<int>(text.length());
+
+  while (start < length) {
+    int remaining = length - start;
+    int take = (remaining < maxCharsPerLine) ? remaining : maxCharsPerLine;
+
+    // Kelime ortasından bölmemek için, sığdığı yerden geriye doğru son
+    // boşluğu ara; bulursa oradan böl.
+    if (take < remaining) {
+      int lastSpace = text.lastIndexOf(' ', start + take);
+      if (lastSpace > start) {
+        take = lastSpace - start;
+      }
+    }
+
+    String line = text.substring(start, start + take);
+    line.trim();
+    lines.push_back(line);
+
+    start += take;
+    while (start < length && text[start] == ' ') {
+      start++;
+    }
+  }
+
+  return lines;
 }

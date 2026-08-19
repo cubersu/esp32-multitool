@@ -14,6 +14,11 @@
 extern SubGhzManager subGhzManager;
 extern Buzzer buzzer;
 
+// OLED'in hangi modda (tam menü/durum ekranı/yok) aktif olduğuna göre
+// davranan sarmalayıcı; main.cpp'de tanımlı. "oled_text" komutu bunu
+// çağırır.
+extern void showPhoneMessage(const String &text);
+
 // Verilen mesajla genel bir hata yanıtı üretir.
 inline String buildErrorResponse(const char *message) {
   JsonDocument responseDoc;
@@ -96,6 +101,16 @@ inline String processCommand(const String &input) {
     String dataJson;
     serializeJson(dataDoc, dataJson);
     return buildDataResponse(dataJson);
+  }
+
+  if (strcmp(cmd, "oled_text") == 0) {
+    const char *text = requestDoc["text"];
+    if (text == nullptr) {
+      return buildErrorResponse("missing text");
+    }
+
+    showPhoneMessage(String(text));
+    return "{\"status\":\"ok\",\"data\":\"shown\"}";
   }
 
   if (strcmp(cmd, "subghz_replay") == 0) {

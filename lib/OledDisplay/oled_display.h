@@ -22,9 +22,14 @@ class OledDisplay {
   // şekilde kaydırılır.
   void showMenu(const String &title, const std::vector<String> &items, int selectedIndex);
 
-  // Düz bir başlık + gövde metni çizer (örn. ping sonucu, hata mesajı).
+  // Düz bir başlık + gövde metni çizer (örn. ping sonucu, hata mesajı,
+  // telefondan gönderilen serbest metin). Gövde ekran genişliğine
+  // sığmıyorsa kelime sınırlarından bölünerek birden fazla satıra
+  // kaydırılır; sığandan fazla satır varsa geri kalanı kesilir.
   void showText(const String &title, const String &body);
 
  private:
   U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2{U8G2_R0};
+
+  static std::vector<String> wrapText(const String &text, int maxCharsPerLine);
 };
