@@ -10,7 +10,7 @@ volatile uint32_t SubGhzManager::lastEdgeMicros = 0;
 void SubGhzManager::begin() {
   ELECHOUSE_cc1101.setGDO0(kGdo0Pin);
   ELECHOUSE_cc1101.Init();
-  ELECHOUSE_cc1101.setMHZ(433.92);
+  setFrequencyMhz(kDefaultFrequencyMhz);
 
   // Ham/raw mod: CC1101'in kendi paket yönetimini kapat (setCCMode(0)),
   // ASK/OOK demodülasyonu (setModulation(2)) ve asenkron seri çıkış
@@ -21,6 +21,10 @@ void SubGhzManager::begin() {
   ELECHOUSE_cc1101.setCCMode(0);
   ELECHOUSE_cc1101.setModulation(2);
   ELECHOUSE_cc1101.setPktFormat(3);
+}
+
+void SubGhzManager::setFrequencyMhz(float mhz) {
+  ELECHOUSE_cc1101.setMHZ(mhz);
 }
 
 String SubGhzManager::captureSignal(uint32_t timeoutMs) {

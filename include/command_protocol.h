@@ -71,13 +71,15 @@ inline String processCommand(const String &input) {
   }
 
   if (strcmp(cmd, "subghz_capture") == 0) {
-    // İsteğe bağlı "timeout_ms" alanı; verilmezse 15sn, güvenlik için en
-    // fazla 60sn.
+    // İsteğe bağlı "frequency_hz" (vars. 433.92MHz) ve "timeout_ms" (vars.
+    // 15sn, güvenlik için en fazla 60sn) alanları.
+    long frequencyHz = requestDoc["frequency_hz"] | 433920000L;
     uint32_t timeoutMs = requestDoc["timeout_ms"] | 15000;
     if (timeoutMs > 60000) {
       timeoutMs = 60000;
     }
 
+    subGhzManager.setFrequencyMhz(frequencyHz / 1000000.0f);
     String pulsesBase64 = subGhzManager.captureSignal(timeoutMs);
     if (pulsesBase64.length() == 0) {
       return buildErrorResponse("no signal captured");
@@ -85,7 +87,7 @@ inline String processCommand(const String &input) {
 
     JsonDocument dataDoc;
     dataDoc["type"] = "subghz_capture";
-    dataDoc["frequency_hz"] = 433920000;
+    dataDoc["frequency_hz"] = frequencyHz;
     dataDoc["pulses_b64"] = pulsesBase64;
 
     String dataJson;
@@ -99,6 +101,9 @@ inline String processCommand(const String &input) {
       return buildErrorResponse("missing pulses_b64");
     }
 
+    // Yakalandığı frekansta geri gönder; belirtilmezse varsayılana düşer.
+    long frequencyHz = requestDoc["frequency_hz"] | 433920000L;
+    subGhzManager.setFrequencyMhz(frequencyHz / 1000000.0f);
     subGhzManager.replaySignal(String(pulsesBase64));
     return "{\"status\":\"ok\",\"data\":\"replayed\"}";
   }

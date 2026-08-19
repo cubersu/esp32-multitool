@@ -27,9 +27,18 @@
 // kodlanmış hâli olarak taşınır.
 class SubGhzManager {
  public:
-  // CC1101'i başlatır, 433.92MHz'e ve ASK/OOK + async seri (raw) moduna
-  // ayarlar. setup() içinde bir kez çağrılmalı.
+  // CC1101'i başlatır, varsayılan frekansa (kDefaultFrequencyMhz) ve
+  // ASK/OOK + async seri (raw) moduna ayarlar. setup() içinde bir kez
+  // çağrılmalı.
   void begin();
+
+  // CC1101'in çalışma frekansını değiştirir; sonraki captureSignal()/
+  // replaySignal() çağrısı bu frekansı kullanır. CC1101 donanımı yalnızca
+  // ~300-348MHz, ~387-464MHz ve ~779-928MHz bantlarını destekler (çipin
+  // üç ayrı sentezleyici aralığı); bu aralıkların dışındaki değerler
+  // hatalı/anlamsız şekilde ayarlanabilir. En yaygın ISM/SRD frekansları:
+  // 315, 433.92, 868, 915 MHz.
+  void setFrequencyMhz(float mhz);
 
   // GDO0 pinini dinleyip bir sinyal yakalanana ya da timeoutMs süresi
   // dolana kadar bekler. İlk kenardan sonra ~5ms sessizlik olursa (burst
@@ -44,6 +53,7 @@ class SubGhzManager {
   void replaySignal(const String &pulsesBase64);
 
  private:
+  static constexpr float kDefaultFrequencyMhz = 433.92f;
   static constexpr uint8_t kGdo0Pin = 4;
   // Tek bir "burst" (bir kumanda tuşuna basışın tek bir tekrarı) tipik
   // olarak 24-40 bit ~ 50-80 kenar içerir; 150, makul bir tekrar payı da
