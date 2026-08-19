@@ -41,18 +41,45 @@ DeviceMenu deviceMenu;
 OledDisplay oledDisplay;
 #endif
 
-// command_protocol.h, "oled_text" komutunu işlerken bu fonksiyonu çağırır.
-// OledDisplay bayrağa göre var olabildiği/olmayabildiği için (bkz. yukarısı)
-// command_protocol.h'ın doğrudan "oledDisplay" global'ine erişmesi yerine bu
-// tek noktadan geçen sarmalayıcı kullanılıyor; böylece hangi mod aktifse
-// (ya da hiçbiri değilse) davranış burada tek yerde yönetiliyor.
-void showPhoneMessage(const String &text) {
+// command_protocol.h'daki komut işleyicileri OLED'e bir şey göstermek
+// istediğinde bu fonksiyonları çağırır. OledDisplay bayrağa göre var
+// olabildiği/olmayabildiği için (bkz. yukarısı) command_protocol.h'ın
+// doğrudan "oledDisplay" global'ine erişmesi yerine bu tek noktadan geçen
+// sarmalayıcılar kullanılıyor; böylece hangi mod aktifse (ya da hiçbiri
+// değilse) davranış burada tek yerde yönetiliyor.
+void showOledStatus(const String &title, const String &body) {
 #if ENABLE_LOCAL_CONTROLS
-  // Tam menü modunda OLED'i DeviceMenu yönetiyor; telefon mesajını
+  // Tam menü modunda OLED'i DeviceMenu yönetiyor; komut sonucu ekranını
   // menünün üzerine yazmak kafa karıştırıcı olur, bu yüzden bu modda
-  // "oled_text" komutu şimdilik yok sayılıyor.
+  // otomatik durum ekranları şimdilik yok sayılıyor.
 #elif ENABLE_OLED_STATUS
-  oledDisplay.showText("Telefondan", text);
+  oledDisplay.showText(title, body);
+#endif
+}
+
+// "oled_text" komutuyla telefondan gönderilen serbest metni gösterir.
+void showPhoneMessage(const String &text) {
+  showOledStatus("Telefondan", text);
+}
+
+// SubGhzManager::captureSignal()'e verilen ilerleme callback'i. Yakalama
+// başında (elapsedMs == 0) kayan çubuk grafiği sıfırlar; sonraki her
+// çağrıda son bir saniyede gelen yeni darbe sayısını ("aktivite seviyesi")
+// grafiğe ekler — bir sinyal yakalandığında bu değer yükselir ("peak").
+void showSubGhzProgress(uint16_t pulseCount, uint32_t elapsedMs) {
+#if ENABLE_LOCAL_CONTROLS
+  // Tam menü modunda OLED'i DeviceMenu yönetiyor; canlı grafik burada
+  // gösterilmiyor.
+#elif ENABLE_OLED_STATUS
+  static uint16_t lastPulseCount = 0;
+  if (elapsedMs == 0) {
+    lastPulseCount = 0;
+    oledDisplay.beginSignalGraph("Sub-GHz Dinleniyor");
+    return;
+  }
+  uint16_t delta = (pulseCount >= lastPulseCount) ? (pulseCount - lastPulseCount) : 0;
+  lastPulseCount = pulseCount;
+  oledDisplay.pushSignalGraphSample(static_cast<uint8_t>(delta > 255 ? 255 : delta));
 #endif
 }
 
@@ -78,7 +105,7 @@ void setup() {
   buttonInput.begin([](ButtonId button) { deviceMenu.onButton(button); });
 #elif ENABLE_OLED_STATUS
   oledDisplay.begin();
-  oledDisplay.showText("ESP32-MultiTool", "Baglanti bekleniyor...");
+  showOledStatus("ESP32-MultiTool", "Bağlantı bekleniyor...");
 #endif
 }
 
@@ -104,7 +131,7 @@ void loop() {
     bool connected = bleManager.isConnected();
     if (connected != lastConnected) {
       lastConnected = connected;
-      oledDisplay.showText("ESP32-MultiTool", connected ? "Bagli" : "Baglanti bekleniyor...");
+      showOledStatus("ESP32-MultiTool", connected ? "Bağlı" : "Bağlantı bekleniyor...");
     }
   }
 #endif

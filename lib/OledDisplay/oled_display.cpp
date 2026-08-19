@@ -78,6 +78,53 @@ void OledDisplay::showText(const String &title, const String &body) {
   u8g2.sendBuffer();
 }
 
+void OledDisplay::beginSignalGraph(const String &title) {
+  graphTitle = title;
+  for (int i = 0; i < kGraphSamples; i++) {
+    graphLevels[i] = 0;
+  }
+  drawSignalGraph();
+}
+
+void OledDisplay::pushSignalGraphSample(uint8_t level) {
+  for (int i = 0; i < kGraphSamples - 1; i++) {
+    graphLevels[i] = graphLevels[i + 1];
+  }
+  graphLevels[kGraphSamples - 1] = level;
+  drawSignalGraph();
+}
+
+void OledDisplay::drawSignalGraph() {
+  u8g2.clearBuffer();
+  u8g2.drawUTF8(0, 10, graphTitle.c_str());
+  u8g2.drawHLine(0, 12, 128);
+
+  constexpr int kGraphTop = 16;
+  constexpr int kGraphBottom = 63;
+  constexpr int kGraphHeight = kGraphBottom - kGraphTop;
+  constexpr int kBarWidth = 128 / kGraphSamples;
+
+  // Ham darbe/saniye seviyesini 0..kGraphHeight aralığına ölçekler; bu eşiğin
+  // üstü tam boy çubuk (tepe/peak) kabul edilir. Gerçek donanımla ilk
+  // denemede kalibre edilmesi gereken kabaca bir tahmin.
+  constexpr uint8_t kMaxLevelForFullBar = 20;
+
+  for (int i = 0; i < kGraphSamples; i++) {
+    int barHeight = (static_cast<int>(graphLevels[i]) * kGraphHeight) / kMaxLevelForFullBar;
+    if (barHeight > kGraphHeight) {
+      barHeight = kGraphHeight;
+    }
+    if (barHeight < 1) {
+      barHeight = 1;
+    }
+    int x = i * kBarWidth;
+    int y = kGraphBottom - barHeight;
+    u8g2.drawBox(x, y, kBarWidth - 1, barHeight);
+  }
+
+  u8g2.sendBuffer();
+}
+
 std::vector<String> OledDisplay::wrapText(const String &text, int maxCharsPerLine) {
   std::vector<String> lines;
   int start = 0;

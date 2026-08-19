@@ -15,9 +15,10 @@ extern SubGhzManager subGhzManager;
 extern Buzzer buzzer;
 
 // OLED'in hangi modda (tam menü/durum ekranı/yok) aktif olduğuna göre
-// davranan sarmalayıcı; main.cpp'de tanımlı. "oled_text" komutu bunu
-// çağırır.
+// davranan sarmalayıcılar; main.cpp'de tanımlı.
+extern void showOledStatus(const String &title, const String &body);
 extern void showPhoneMessage(const String &text);
+extern void showSubGhzProgress(uint16_t pulseCount, uint32_t elapsedMs);
 
 // Verilen mesajla genel bir hata yanıtı üretir.
 inline String buildErrorResponse(const char *message) {
@@ -67,15 +68,22 @@ inline String processCommand(const String &input) {
 
   if (strcmp(cmd, "ping") == 0) {
     buzzer.beep();
+    showOledStatus("Ping", "PONG");
     return "{\"status\":\"ok\",\"data\":\"pong\"}";
   }
 
   if (strcmp(cmd, "wifi_scan") == 0) {
-    return buildDataResponse(scanWifiNetworks());
+    showOledStatus("Wi-Fi", "Wifi taranıyor...");
+    String data = scanWifiNetworks();
+    showOledStatus("Wi-Fi", "Tarama tamamlandı");
+    return buildDataResponse(data);
   }
 
   if (strcmp(cmd, "ble_scan") == 0) {
-    return buildDataResponse(scanBleDevices());
+    showOledStatus("BLE", "BLE taranıyor...");
+    String data = scanBleDevices();
+    showOledStatus("BLE", "Tarama tamamlandı");
+    return buildDataResponse(data);
   }
 
   if (strcmp(cmd, "subghz_capture") == 0) {
@@ -88,10 +96,12 @@ inline String processCommand(const String &input) {
     }
 
     subGhzManager.setFrequencyMhz(frequencyHz / 1000000.0f);
-    String pulsesBase64 = subGhzManager.captureSignal(timeoutMs);
+    String pulsesBase64 = subGhzManager.captureSignal(timeoutMs, showSubGhzProgress);
     if (pulsesBase64.length() == 0) {
+      showOledStatus("Sub-GHz", "Sinyal yok");
       return buildErrorResponse("no signal captured");
     }
+    showOledStatus("Sub-GHz", "Yakalandı!");
 
     JsonDocument dataDoc;
     dataDoc["type"] = "subghz_capture";

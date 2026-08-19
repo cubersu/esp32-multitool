@@ -28,8 +28,24 @@ class OledDisplay {
   // kaydırılır; sığandan fazla satır varsa geri kalanı kesilir.
   void showText(const String &title, const String &body);
 
+  // Sub-GHz yakalama gibi zamanla değişen bir aktiviteyi kayan bir çubuk
+  // grafikle göstermeye başlar; başlığı çizer, grafik alanını sıfırlar
+  // (tüm çubuklar düz/boş).
+  void beginSignalGraph(const String &title);
+
+  // Grafiğe yeni bir örnek ekler: mevcut çubuklar bir basamak sola kayar,
+  // en sağa level yüksekliğinde yeni bir çubuk eklenir. level arttıkça
+  // (örn. bir RF sinyali yakalandığında) çubuk boyu artar ("peak").
+  // beginSignalGraph() çağrılmadan kullanılırsa tanımsızdır.
+  void pushSignalGraphSample(uint8_t level);
+
  private:
   U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2{U8G2_R0};
 
+  static constexpr int kGraphSamples = 32;  // 128px / 4px çubuk genişliği
+  uint8_t graphLevels[kGraphSamples] = {0};
+  String graphTitle;
+
   static std::vector<String> wrapText(const String &text, int maxCharsPerLine);
+  void drawSignalGraph();
 };
