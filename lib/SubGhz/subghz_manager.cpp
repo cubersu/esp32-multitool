@@ -28,7 +28,7 @@ void SubGhzManager::setFrequencyMhz(float mhz) {
   ELECHOUSE_cc1101.setMHZ(mhz);
 }
 
-String SubGhzManager::captureSignal(uint32_t timeoutMs) {
+String SubGhzManager::captureSignal(uint32_t timeoutMs, CaptureProgressCallback onProgress) {
   pulseCount = 0;
   lastEdgeMicros = micros();
 
@@ -37,7 +37,18 @@ String SubGhzManager::captureSignal(uint32_t timeoutMs) {
   attachInterrupt(digitalPinToInterrupt(kGdo0Pin), onEdge, CHANGE);
 
   uint32_t startMs = millis();
+  uint32_t lastProgressMs = startMs;
+  if (onProgress) {
+    onProgress(0, 0);
+  }
+
   while (millis() - startMs < timeoutMs) {
+    uint32_t nowMs = millis();
+    if (onProgress && (nowMs - lastProgressMs) >= 1000) {
+      lastProgressMs = nowMs;
+      onProgress(pulseCount, nowMs - startMs);
+    }
+
     // İlk kenardan sonra yeterince sessizlik geçtiyse (burst bitti kabul
     // edilir) taramayı erken sonlandır.
     if (pulseCount > 0 && (micros() - lastEdgeMicros) > kEndOfBurstGapUs) {

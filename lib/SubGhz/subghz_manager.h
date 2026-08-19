@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <functional>
 
 // CC1101 433MHz modülüyle ham (raw) RF sinyali yakalama/tekrar oynatma
 // (replay). Yalnızca ASK/OOK modülasyonlu, SABİT KODLU (fixed code)
@@ -40,12 +41,20 @@ class SubGhzManager {
   // 315, 433.92, 868, 915 MHz.
   void setFrequencyMhz(float mhz);
 
+  // captureSignal() sırasında yaklaşık her saniyede bir çağrılan ilerleme
+  // bildirimi; ekranda canlı bir aktivite grafiği çizmek gibi UI amaçlı
+  // kullanımlar için. İlk çağrı, yakalama başlar başlamaz (elapsedMs == 0,
+  // pulseCount == 0) yapılır; sonraki çağrılarda pulseCount o ana kadar
+  // yakalanan toplam darbe sayısını taşır.
+  using CaptureProgressCallback = std::function<void(uint16_t pulseCount, uint32_t elapsedMs)>;
+
   // GDO0 pinini dinleyip bir sinyal yakalanana ya da timeoutMs süresi
   // dolana kadar bekler. İlk kenardan sonra ~5ms sessizlik olursa (burst
   // bitti kabul edilir) erken döner. Yakalanan darbeleri base64 string
   // olarak döner; hiçbir şey yakalanmazsa boş string döner. Bloklayan
-  // bir çağrıdır.
-  String captureSignal(uint32_t timeoutMs);
+  // bir çağrıdır. onProgress verilirse (opsiyonel) yukarıdaki gibi
+  // periyodik olarak çağrılır.
+  String captureSignal(uint32_t timeoutMs, CaptureProgressCallback onProgress = nullptr);
 
   // Daha önce captureSignal()'in döndürdüğü formattaki base64 darbe
   // dizisini CC1101 üzerinden tekrar gönderir (replay). Format hatalı ya
