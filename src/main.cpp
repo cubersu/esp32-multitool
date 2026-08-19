@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "ble_manager.h"
+#include "buzzer.h"
 #include "command_protocol.h"
 #include "feature_flags.h"
 #include "subghz_manager.h"
@@ -22,6 +23,10 @@ BleManager bleManager;
 // çip yokken begin()'in/komutların davranışı doğrulanmadı, modül takılıp
 // ilk test edildiğinde kontrol edilmeli.
 SubGhzManager subGhzManager;
+
+// Piezo buzzer ("RX2" pini / GPIO16). command_protocol.h ping komutunda
+// bunu çağırır.
+Buzzer buzzer;
 
 #if ENABLE_LOCAL_CONTROLS
 // OLED + 5 butonla telefon olmadan yerel kontrol (Faz 1). Şu an
@@ -46,6 +51,8 @@ void setup() {
 
   // CC1101'i 433.92MHz + ASK/OOK moduna ayarla (Faz 4).
   subGhzManager.begin();
+
+  buzzer.begin();
 
 #if ENABLE_LOCAL_CONTROLS
   // Yerel OLED + buton menüsünü başlat. deviceMenu, ping/wifi_scan/
