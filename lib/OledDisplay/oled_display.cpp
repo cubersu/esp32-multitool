@@ -1,26 +1,34 @@
 #include "oled_display.h"
 
 namespace {
-constexpr int kVisibleRows = 4;
-constexpr int kRowHeight = 12;
-constexpr int kFirstRowY = 24;
+// unifont ailesi ~16px yüksekliğinde glif kullanıyor (eski u8g2_font_6x10_tf
+// ise ~10px'ti) — bu yüzden başlık/ayraç/satır konumları unifont'un gerçek
+// boyutuna göre ayarlandı. Eski (çok dar) değerlerle satırlar donanımda
+// birbirine giriyordu.
+constexpr int kTitleY = 12;      // başlık taban çizgisi
+constexpr int kDividerY = 14;    // başlığın altındaki ayraç çizgisi
+constexpr int kFirstRowY = 30;   // ayraçtan sonra bir satırlık boşluk bırakır
+constexpr int kRowHeight = 16;   // art arda satırlar arası mesafe
+constexpr int kVisibleRows = 3;  // 64px ekranda bu aralıklarla sığan satır sayısı
 }  // namespace
 
 void OledDisplay::begin() {
   u8g2.begin();
-  // u8g2_font_6x10_tf yalnızca ASCII kapsıyordu; Türkçe karakterler (ç, ğ,
-  // ı, İ, ö, ş, ü) için Latin Extended-A bloğunu da içeren unifont_t_latin
-  // kullanılıyor. Daha büyük bir bitmap font olduğu için flash kullanımı
-  // artar ama ESP32'nin flash'ı (tipik 4MB) buna fazlasıyla yeter.
-  u8g2.setFont(u8g2_font_unifont_t_latin);
+  // u8g2_font_6x10_tf yalnızca ASCII kapsıyordu. unifont_t_latin'e
+  // geçilmişti ama donanımda Türkçe'ye özgü karakterler (ğ, ı, İ, ş) hâlâ
+  // görünmedi — bu font muhtemelen yalnızca Latin-1'i (ç, ö, ü) kapsıyor,
+  // Latin Extended-A'yı değil. unifont_t_extended'e geçildi; bu da
+  // donanımda doğrulanmalı, hâlâ eksikse ASCII harf çevirisine (ör. ğ->g,
+  // ı->i, ş->s) düşmemiz gerekebilir.
+  u8g2.setFont(u8g2_font_unifont_t_extended);
 }
 
 void OledDisplay::showMenu(const String &title, const std::vector<String> &items, int selectedIndex) {
   u8g2.clearBuffer();
   // drawStr() UTF-8 çok baytlı dizileri çözmez (her baytı ayrı bir glif
   // sanır); drawUTF8() Türkçe karakterlerin doğru gösterilmesi için şart.
-  u8g2.drawUTF8(0, 10, title.c_str());
-  u8g2.drawHLine(0, 12, 128);
+  u8g2.drawUTF8(0, kTitleY, title.c_str());
+  u8g2.drawHLine(0, kDividerY, 128);
 
   int itemCount = static_cast<int>(items.size());
 
@@ -52,11 +60,11 @@ void OledDisplay::showMenu(const String &title, const std::vector<String> &items
 
 void OledDisplay::showText(const String &title, const String &body) {
   u8g2.clearBuffer();
-  u8g2.drawUTF8(0, 10, title.c_str());
-  u8g2.drawHLine(0, 12, 128);
+  u8g2.drawUTF8(0, kTitleY, title.c_str());
+  u8g2.drawHLine(0, kDividerY, 128);
 
-  // unifont_t_latin ~6px/karakter genişliğinde; 128px genişlikte küçük bir
-  // kenar payıyla satır başına ~20 (tek baytlı ASCII) karakter sığar.
+  // unifont_t_extended ~6px/karakter genişliğinde; 128px genişlikte küçük
+  // bir kenar payıyla satır başına ~20 (tek baytlı ASCII) karakter sığar.
   // NOT: wrapText() bayt sayıyor, Unicode karakter değil — Türkçe harfler
   // UTF-8'de 2 bayt tuttuğu için boşluksuz uzun bir kelime tam bu sınıra
   // denk gelirse, teoride çok baytlı bir karakterin ortasından bölünebilir.
@@ -96,10 +104,10 @@ void OledDisplay::pushSignalGraphSample(uint8_t level) {
 
 void OledDisplay::drawSignalGraph() {
   u8g2.clearBuffer();
-  u8g2.drawUTF8(0, 10, graphTitle.c_str());
-  u8g2.drawHLine(0, 12, 128);
+  u8g2.drawUTF8(0, kTitleY, graphTitle.c_str());
+  u8g2.drawHLine(0, kDividerY, 128);
 
-  constexpr int kGraphTop = 16;
+  constexpr int kGraphTop = kDividerY + 4;
   constexpr int kGraphBottom = 63;
   constexpr int kGraphHeight = kGraphBottom - kGraphTop;
   constexpr int kBarWidth = 128 / kGraphSamples;
