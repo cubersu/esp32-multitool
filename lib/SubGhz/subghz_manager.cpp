@@ -2,6 +2,7 @@
 
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <base64.h>
+#include <mbedtls/base64.h>
 
 volatile uint16_t SubGhzManager::pulseDurations[SubGhzManager::kMaxPulses];
 volatile uint16_t SubGhzManager::pulseCount = 0;
@@ -68,21 +69,20 @@ String SubGhzManager::captureSignal(uint32_t timeoutMs) {
 }
 
 void SubGhzManager::replaySignal(const String &pulsesBase64) {
-  int estimatedLength = base64::decodedLength(pulsesBase64.c_str(), pulsesBase64.length());
-  if (estimatedLength <= 0 || estimatedLength > static_cast<int>(kMaxPulses * 2)) {
-    // Boş ya da beklenenden büyük veri; sabit boyutlu buffer'ı taşırmamak
-    // için reddet.
-    return;
-  }
-
+  // ESP32 Arduino core'un base64 sınıfı yalnızca encode() sağlıyor; decode
+  // için ESP-IDF'e gömülü mbedtls kullanılıyor. dlen, rawBytes'ın kapasitesi
+  // olduğu için çıktı bundan büyükse mbedtls_base64_decode kendiliğinden
+  // hata döner (sabit buffer taşması burada da engellenmiş olur).
   uint8_t rawBytes[kMaxPulses * 2];
-  int actualLength =
-      base64::decode(reinterpret_cast<char *>(rawBytes), pulsesBase64.c_str(), pulsesBase64.length());
-  if (actualLength <= 0) {
+  size_t decodedLength = 0;
+  int decodeResult = mbedtls_base64_decode(
+      rawBytes, sizeof(rawBytes), &decodedLength,
+      reinterpret_cast<const unsigned char *>(pulsesBase64.c_str()), pulsesBase64.length());
+  if (decodeResult != 0 || decodedLength == 0) {
     return;
   }
 
-  uint16_t count = actualLength / 2;
+  uint16_t count = decodedLength / 2;
 
   pinMode(kGdo0Pin, OUTPUT);
   ELECHOUSE_cc1101.SetTx();
