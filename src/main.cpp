@@ -4,9 +4,11 @@
 #include "buzzer.h"
 #include "command_protocol.h"
 #include "feature_flags.h"
+#include "net_scanner.h"
 #include "subghz_manager.h"
 #include "wifi_deauth.h"
 #include "wifi_sniffer.h"
+#include "wps_check.h"
 
 #if ENABLE_LOCAL_CONTROLS
 #include "button_input.h"
@@ -37,6 +39,14 @@ WifiSniffer wifiSniffer;
 // Wi-Fi deauthentication çerçevesi enjeksiyonu. SADECE KENDİ AĞINI TEST
 // ETMEK İÇİN — bkz. wifi_deauth.h üstündeki yasal/etik not.
 WifiDeauth wifiDeauth;
+
+// Basit ağ keşfi/port tarayıcı (kendi ağına katılıp aynı alt ağı tarar).
+// SADECE KENDİ AĞINI TEST ETMEK İÇİN — bkz. net_scanner.h.
+NetScanner netScanner;
+
+// Pasif WPS keşif kontrolü (PIN kaba kuvvet aracı DEĞİL). SADECE KENDİ
+// AĞINI TEST ETMEK İÇİN — bkz. wps_check.h üstündeki kapsam notu.
+WpsCheck wpsCheck;
 
 #if ENABLE_LOCAL_CONTROLS
 // OLED + 5 butonla telefon olmadan yerel kontrol (Faz 1). Şu an
@@ -107,6 +117,8 @@ void setup() {
   buzzer.begin();
   wifiSniffer.begin();
   wifiDeauth.begin();
+  netScanner.begin();
+  wpsCheck.begin();
 
 #if ENABLE_LOCAL_CONTROLS
   // Yerel OLED + buton menüsünü başlat. deviceMenu, ping/wifi_scan/
