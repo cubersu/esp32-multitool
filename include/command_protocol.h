@@ -6,23 +6,27 @@
 #include "ble_manager.h"
 #include "ble_scanner.h"
 #include "buzzer.h"
+#include "net_scanner.h"
 #include "subghz_manager.h"
 #include "wifi_deauth.h"
 #include "wifi_scanner.h"
 #include "wifi_sniffer.h"
+#include "wps_check.h"
 
-// BleManager, SubGhzManager, Buzzer, WifiSniffer ve WifiDeauth, setup()
-// içinde bir kez begin() çağrılan durumlu (stateful) modüller oldukları
-// için main.cpp'de tanımlanır; burada yalnızca referans ediliyor.
-// bleManager'a doğrudan erişim yalnızca wifi_capture'ın parçalı (chunked)
-// bildirim göndermesi için gerekiyor — normal komutlar hâlâ tek bir dönüş
-// değeriyle cevap veriyor, BleManager::CommandCharCallbacks bunu otomatik
-// notify ediyor.
+// BleManager, SubGhzManager, Buzzer, WifiSniffer, WifiDeauth, NetScanner ve
+// WpsCheck, setup() içinde bir kez begin() çağrılan durumlu (stateful)
+// modüller oldukları için main.cpp'de tanımlanır; burada yalnızca referans
+// ediliyor. bleManager'a doğrudan erişim yalnızca wifi_capture'ın parçalı
+// (chunked) bildirim göndermesi için gerekiyor — normal komutlar hâlâ tek
+// bir dönüş değeriyle cevap veriyor, BleManager::CommandCharCallbacks bunu
+// otomatik notify ediyor.
 extern BleManager bleManager;
 extern SubGhzManager subGhzManager;
 extern Buzzer buzzer;
 extern WifiSniffer wifiSniffer;
 extern WifiDeauth wifiDeauth;
+extern NetScanner netScanner;
+extern WpsCheck wpsCheck;
 
 // OLED'in hangi modda (tam menü/durum ekranı/yok) aktif olduğuna göre
 // davranan sarmalayıcılar; main.cpp'de tanımlı.
@@ -229,6 +233,115 @@ inline String processCommand(const String &input) {
     String dataJson;
     serializeJson(dataDoc, dataJson);
     return buildDataResponse(dataJson);
+  }
+
+  if (strcmp(cmd, "rogue_ap_scan") == 0) {
+    // "ssid" zorunlu (izlenecek ağ adı). "known_bssid" isteğe bağlı — kendi
+    // gerçek erişim noktanın MAC'i verilirse ona eşleşmeyen her BSSID
+    // şüpheli işaretlenir; verilmezse yalnızca o SSID'yi yayınlayan tüm
+    // BSSID'ler listelenir (birden fazlaysa zaten şüpheli demektir).
+    // Tamamen pasif tarama — hiçbir şey yayınlamaz.
+    const char *ssid = requestDoc["ssid"];
+    if (ssid == nullptr) {
+      return buildErrorResponse("missing ssid");
+    }
+    const char *knownBssid = requestDoc["known_bssid"] | "";
+
+    showOledStatus("Sahte AP Tarama", "Taranıyor...");
+    String data = scanForRogueAp(String(ssid), String(knownBssid));
+    showOledStatus("Sahte AP Tarama", "Tamamlandı");
+    return buildDataResponse(data);
+  }
+
+  if (strcmp(cmd, "wps_check") == 0) {
+    // "bssid" ve "channel" (1-13) zorunlu — belirli bir AP'nin beacon'ını
+    // pasif olarak dinleyip WPS bilgi elemanının var olup olmadığını
+    // kontrol eder. Bu bir PIN kaba kuvvet aracı DEĞİL, yalnızca "WPS açık
+    // mı" keşfi — bkz. wps_check.h üstündeki kapsam notu.
+    const char *bssidStr = requestDoc["bssid"];
+    if (bssidStr == nullptr) {
+      return buildErrorResponse("missing bssid");
+    }
+    uint8_t bssid[6];
+    if (!WifiDeauth::parseMacAddress(bssidStr, bssid)) {
+      return buildErrorResponse("invalid bssid");
+    }
+    int channel = requestDoc["channel"] | 1;
+    if (channel < 1 || channel > 13) {
+      return buildErrorResponse("channel must be 1-13");
+    }
+    uint32_t timeoutMs = requestDoc["timeout_ms"] | 10000;
+    if (timeoutMs > 30000) {
+      timeoutMs = 30000;
+    }
+
+    showOledStatus("WPS Kontrolü", "Dinleniyor...");
+    bool wpsEnabled = false;
+    bool found = wpsCheck.checkWps(bssid, static_cast<uint8_t>(channel), timeoutMs, &wpsEnabled);
+    if (!found) {
+      showOledStatus("WPS Kontrolü", "Beacon yok");
+      return buildErrorResponse("no beacon seen from this bssid/channel");
+    }
+    showOledStatus("WPS Kontrolü", wpsEnabled ? "WPS AÇIK" : "WPS kapalı");
+
+    JsonDocument dataDoc;
+    dataDoc["type"] = "wps_check";
+    dataDoc["bssid"] = bssidStr;
+    dataDoc["wps_enabled"] = wpsEnabled;
+
+    String dataJson;
+    serializeJson(dataDoc, dataJson);
+    return buildDataResponse(dataJson);
+  }
+
+  if (strcmp(cmd, "net_scan") == 0) {
+    // "ssid" zorunlu (katılınacak kendi ağın); "password" isteğe bağlı
+    // (açık ağ için boş bırak). "ports" isteğe bağlı bir tamsayı dizisi
+    // (en fazla NetScanner::kMaxPorts); verilmezse yaygın portlar
+    // kullanılır. Süre alanları güvenlik için üst sınırlara kırpılır.
+    const char *ssid = requestDoc["ssid"];
+    if (ssid == nullptr) {
+      return buildErrorResponse("missing ssid");
+    }
+    const char *password = requestDoc["password"] | "";
+
+    uint16_t ports[NetScanner::kMaxPorts];
+    uint8_t portCount = 0;
+    JsonArray requestedPorts = requestDoc["ports"].as<JsonArray>();
+    for (JsonVariant v : requestedPorts) {
+      if (portCount >= NetScanner::kMaxPorts) {
+        break;
+      }
+      ports[portCount++] = v.as<uint16_t>();
+    }
+    if (portCount == 0) {
+      constexpr uint16_t kDefaultPorts[] = {21, 22, 23, 80, 443, 3389, 8080};
+      portCount = sizeof(kDefaultPorts) / sizeof(kDefaultPorts[0]);
+      memcpy(ports, kDefaultPorts, sizeof(kDefaultPorts));
+    }
+
+    uint32_t connectTimeoutMs = requestDoc["connect_timeout_ms"] | 10000;
+    if (connectTimeoutMs > 20000) {
+      connectTimeoutMs = 20000;
+    }
+    uint32_t portTimeoutMs = requestDoc["port_timeout_ms"] | 150;
+    if (portTimeoutMs > 1000) {
+      portTimeoutMs = 1000;
+    }
+    uint32_t maxTotalMs = requestDoc["timeout_ms"] | 30000;
+    if (maxTotalMs > 60000) {
+      maxTotalMs = 60000;
+    }
+
+    showOledStatus("Ağ Taraması", "Bağlanılıyor...");
+    String data =
+        netScanner.scan(String(ssid), String(password), ports, portCount, connectTimeoutMs, portTimeoutMs, maxTotalMs);
+    if (data.length() == 0) {
+      showOledStatus("Ağ Taraması", "Bağlantı hatası");
+      return buildErrorResponse("could not connect to wifi network");
+    }
+    showOledStatus("Ağ Taraması", "Tamamlandı");
+    return buildDataResponse(data);
   }
 
   if (strcmp(cmd, "oled_text") == 0) {
