@@ -3,16 +3,23 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+#include "ble_manager.h"
 #include "ble_scanner.h"
 #include "buzzer.h"
 #include "subghz_manager.h"
 #include "wifi_scanner.h"
+#include "wifi_sniffer.h"
 
-// SubGhzManager ve Buzzer, setup() içinde bir kez begin() çağrılan durumlu
-// (stateful) modüller oldukları için main.cpp'de tanımlanır; burada
-// yalnızca referans ediliyor.
+// BleManager, SubGhzManager, Buzzer ve WifiSniffer, setup() içinde bir kez
+// begin() çağrılan durumlu (stateful) modüller oldukları için main.cpp'de
+// tanımlanır; burada yalnızca referans ediliyor. bleManager'a doğrudan
+// erişim yalnızca wifi_capture'ın parçalı (chunked) bildirim göndermesi
+// için gerekiyor — normal komutlar hâlâ tek bir dönüş değeriyle cevap
+// veriyor, BleManager::CommandCharCallbacks bunu otomatik notify ediyor.
+extern BleManager bleManager;
 extern SubGhzManager subGhzManager;
 extern Buzzer buzzer;
+extern WifiSniffer wifiSniffer;
 
 // OLED'in hangi modda (tam menü/durum ekranı/yok) aktif olduğuna göre
 // davranan sarmalayıcılar; main.cpp'de tanımlı.
@@ -111,6 +118,68 @@ inline String processCommand(const String &input) {
     String dataJson;
     serializeJson(dataDoc, dataJson);
     return buildDataResponse(dataJson);
+  }
+
+  if (strcmp(cmd, "wifi_capture") == 0) {
+    // "channel" (1-13, Wi-Fi kanalı) zorunlu; "timeout_ms" isteğe bağlı
+    // (vars. 15sn, güvenlik için en fazla 60sn).
+    int channel = requestDoc["channel"] | 1;
+    if (channel < 1 || channel > 13) {
+      return buildErrorResponse("channel must be 1-13");
+    }
+    uint32_t timeoutMs = requestDoc["timeout_ms"] | 15000;
+    if (timeoutMs > 60000) {
+      timeoutMs = 60000;
+    }
+
+    showOledStatus("Wi-Fi Yakala", "Dinleniyor...");
+    String pcapBase64 = wifiSniffer.captureHandshake(static_cast<uint8_t>(channel), timeoutMs);
+    if (pcapBase64.length() == 0) {
+      showOledStatus("Wi-Fi Yakala", "Paket yok");
+      return buildErrorResponse("no packets captured");
+    }
+    showOledStatus("Wi-Fi Yakala", "Yakalandı!");
+
+    // PCAP verisi (base64 kodlanmış) tek bir BLE bildirimine sığmayacak
+    // kadar büyük olabilir; parçalara bölüp her birini ayrı notify ile
+    // gönderiyoruz. kChunkSize donanımla doğrulanmamış, muhafazakâr bir
+    // tahmin — MTU pazarlığı düşük bir değerde kalırsa bile sığması
+    // hedeflendi (bkz. ble_manager.cpp'deki MTU notu).
+    constexpr int kChunkSize = 200;
+    int totalLength = pcapBase64.length();
+    int totalChunks = (totalLength + kChunkSize - 1) / kChunkSize;
+    uint32_t captureId = millis();
+    uint16_t packetCount = wifiSniffer.lastPacketCount();
+
+    for (int i = 0; i < totalChunks; i++) {
+      int start = i * kChunkSize;
+      int len = (start + kChunkSize > totalLength) ? (totalLength - start) : kChunkSize;
+
+      JsonDocument chunkDoc;
+      chunkDoc["type"] = "wifi_capture_chunk";
+      chunkDoc["capture_id"] = captureId;
+      chunkDoc["seq"] = i;
+      chunkDoc["total"] = totalChunks;
+      // packet_count her parçada tekrarlanıyor (redundant ama basit); Android
+      // tarafı yalnızca birleştirme bitince (son parçada) kullanıyor.
+      chunkDoc["packet_count"] = packetCount;
+      chunkDoc["chunk_b64"] = pcapBase64.substring(start, start + len);
+
+      String chunkDataJson;
+      serializeJson(chunkDoc, chunkDataJson);
+      bleManager.notifyResponse(buildDataResponse(chunkDataJson));
+      delay(20);  // BLE bildirim kuyruğunu taşırmamak için küçük bir ara.
+    }
+
+    JsonDocument summaryDoc;
+    summaryDoc["type"] = "wifi_capture_summary";
+    summaryDoc["capture_id"] = captureId;
+    summaryDoc["total_chunks"] = totalChunks;
+    summaryDoc["packet_count"] = packetCount;
+
+    String summaryJson;
+    serializeJson(summaryDoc, summaryJson);
+    return buildDataResponse(summaryJson);
   }
 
   if (strcmp(cmd, "oled_text") == 0) {
