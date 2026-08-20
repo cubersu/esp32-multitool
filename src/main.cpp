@@ -5,6 +5,7 @@
 #include "command_protocol.h"
 #include "feature_flags.h"
 #include "subghz_manager.h"
+#include "wifi_deauth.h"
 #include "wifi_sniffer.h"
 
 #if ENABLE_LOCAL_CONTROLS
@@ -32,6 +33,10 @@ Buzzer buzzer;
 // Wi-Fi paket yakalama (promiscuous mode / EAPOL handshake). SADECE KENDİ
 // AĞINI TEST ETMEK İÇİN — bkz. wifi_sniffer.h üstündeki yasal/etik not.
 WifiSniffer wifiSniffer;
+
+// Wi-Fi deauthentication çerçevesi enjeksiyonu. SADECE KENDİ AĞINI TEST
+// ETMEK İÇİN — bkz. wifi_deauth.h üstündeki yasal/etik not.
+WifiDeauth wifiDeauth;
 
 #if ENABLE_LOCAL_CONTROLS
 // OLED + 5 butonla telefon olmadan yerel kontrol (Faz 1). Şu an
@@ -101,6 +106,7 @@ void setup() {
 
   buzzer.begin();
   wifiSniffer.begin();
+  wifiDeauth.begin();
 
 #if ENABLE_LOCAL_CONTROLS
   // Yerel OLED + buton menüsünü başlat. deviceMenu, ping/wifi_scan/

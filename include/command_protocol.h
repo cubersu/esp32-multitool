@@ -7,19 +7,22 @@
 #include "ble_scanner.h"
 #include "buzzer.h"
 #include "subghz_manager.h"
+#include "wifi_deauth.h"
 #include "wifi_scanner.h"
 #include "wifi_sniffer.h"
 
-// BleManager, SubGhzManager, Buzzer ve WifiSniffer, setup() içinde bir kez
-// begin() çağrılan durumlu (stateful) modüller oldukları için main.cpp'de
-// tanımlanır; burada yalnızca referans ediliyor. bleManager'a doğrudan
-// erişim yalnızca wifi_capture'ın parçalı (chunked) bildirim göndermesi
-// için gerekiyor — normal komutlar hâlâ tek bir dönüş değeriyle cevap
-// veriyor, BleManager::CommandCharCallbacks bunu otomatik notify ediyor.
+// BleManager, SubGhzManager, Buzzer, WifiSniffer ve WifiDeauth, setup()
+// içinde bir kez begin() çağrılan durumlu (stateful) modüller oldukları
+// için main.cpp'de tanımlanır; burada yalnızca referans ediliyor.
+// bleManager'a doğrudan erişim yalnızca wifi_capture'ın parçalı (chunked)
+// bildirim göndermesi için gerekiyor — normal komutlar hâlâ tek bir dönüş
+// değeriyle cevap veriyor, BleManager::CommandCharCallbacks bunu otomatik
+// notify ediyor.
 extern BleManager bleManager;
 extern SubGhzManager subGhzManager;
 extern Buzzer buzzer;
 extern WifiSniffer wifiSniffer;
+extern WifiDeauth wifiDeauth;
 
 // OLED'in hangi modda (tam menü/durum ekranı/yok) aktif olduğuna göre
 // davranan sarmalayıcılar; main.cpp'de tanımlı.
@@ -180,6 +183,52 @@ inline String processCommand(const String &input) {
     String summaryJson;
     serializeJson(summaryDoc, summaryJson);
     return buildDataResponse(summaryJson);
+  }
+
+  if (strcmp(cmd, "wifi_deauth") == 0) {
+    // "bssid" (kendi erişim noktan) zorunlu — otomatik/keşif tabanlı bir
+    // hedef seçimi kasıtlı olarak yok, bkz. wifi_deauth.h. "client_mac"
+    // isteğe bağlı (vars. yayın adresi FF:FF:FF:FF:FF:FF — BSSID'ye bağlı
+    // tüm istemciler). "count" en fazla WifiDeauth::kMaxFrameCount'a
+    // kırpılır (sendDeauth() içinde).
+    const char *bssidStr = requestDoc["bssid"];
+    if (bssidStr == nullptr) {
+      return buildErrorResponse("missing bssid");
+    }
+    uint8_t bssid[6];
+    if (!WifiDeauth::parseMacAddress(bssidStr, bssid)) {
+      return buildErrorResponse("invalid bssid");
+    }
+
+    const char *clientMacStr = requestDoc["client_mac"] | "FF:FF:FF:FF:FF:FF";
+    uint8_t clientMac[6];
+    if (!WifiDeauth::parseMacAddress(clientMacStr, clientMac)) {
+      return buildErrorResponse("invalid client_mac");
+    }
+
+    int channel = requestDoc["channel"] | 1;
+    if (channel < 1 || channel > 13) {
+      return buildErrorResponse("channel must be 1-13");
+    }
+    int count = requestDoc["count"] | 10;
+    if (count < 1) {
+      count = 1;
+    }
+
+    showOledStatus("Deauth", "Gonderiliyor...");
+    uint16_t sent =
+        wifiDeauth.sendDeauth(bssid, clientMac, static_cast<uint8_t>(channel), static_cast<uint16_t>(count));
+    showOledStatus("Deauth", String(sent) + " cerceve");
+
+    JsonDocument dataDoc;
+    dataDoc["type"] = "wifi_deauth";
+    dataDoc["bssid"] = bssidStr;
+    dataDoc["client_mac"] = clientMacStr;
+    dataDoc["frames_sent"] = sent;
+
+    String dataJson;
+    serializeJson(dataDoc, dataJson);
+    return buildDataResponse(dataJson);
   }
 
   if (strcmp(cmd, "oled_text") == 0) {
